@@ -3,224 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Quiz med OpenRouter API</title>
+  <title>OpenRouter Quiz</title>
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
-      color: #102a43;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      background: #222;
+      color: #eee;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 1rem;
+      justify-content: center;
       min-height: 100vh;
       margin: 0;
-    }
-    h1 {
-      margin-bottom: 0.5rem;
+      padding: 2rem;
     }
     #question {
-      font-size: 1.4rem;
-      margin: 1rem 0;
-      min-height: 4em;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
       max-width: 600px;
       text-align: center;
     }
-    #answer-input {
+    #answerInput {
       font-size: 1.2rem;
       padding: 0.5rem;
       width: 300px;
       max-width: 90vw;
-      border: 2px solid #627d98;
-      border-radius: 6px;
-      outline: none;
-      transition: border-color 0.3s;
+      margin-bottom: 1rem;
     }
-    #answer-input:focus {
-      border-color: #2cb67d;
-    }
-    button {
-      margin-top: 1rem;
-      background-color: #2cb67d;
-      color: white;
-      border: none;
-      padding: 0.7rem 1.5rem;
+    #submitBtn {
       font-size: 1.2rem;
-      border-radius: 6px;
+      padding: 0.5rem 1rem;
       cursor: pointer;
-      transition: background-color 0.3s;
     }
-    button:hover:not(:disabled) {
-      background-color: #249a67;
-    }
-    button:disabled {
-      background-color: #a0c4a6;
-      cursor: not-allowed;
-    }
-    #feedback {
+    #status {
       margin-top: 1rem;
-      font-size: 1.1rem;
-      min-height: 1.5em;
-      color: #334e68;
-      transition: opacity 0.4s;
-    }
-    #score {
-      margin-top: 1rem;
-      font-weight: bold;
-      font-size: 1.2rem;
-    }
-    #loading {
-      margin-top: 1rem;
-      font-style: italic;
-      color: #627d98;
-    }
-    @keyframes fadeIn {
-      from {opacity: 0;}
-      to {opacity: 1;}
-    }
-    .fade-in {
-      animation: fadeIn 0.6s ease-in-out;
+      min-height: 1.5rem;
     }
   </style>
 </head>
 <body>
-  <h1>Quiz med OpenRouter API</h1>
-  <div id="question" class="fade-in">Tryck på Start för att få din första fråga!</div>
-  <input type="text" id="answer-input" placeholder="Skriv ditt svar här..." disabled />
-  <button id="submit-btn" disabled>Skicka svar</button>
-  <button id="start-btn">Starta quiz</button>
-  <div id="feedback"></div>
-  <div id="score">Poäng: 0</div>
-  <div id="loading" style="display:none;">Laddar fråga...</div>
+  <h1>OpenRouter Quiz</h1>
+  <div id="question">Laddar fråga...</div>
+  <input id="answerInput" placeholder="Skriv ditt svar här" autocomplete="off" />
+  <button id="submitBtn">Skicka svar</button>
+  <div id="status"></div>
 
   <script>
     const questionEl = document.getElementById('question');
-    const answerInput = document.getElementById('answer-input');
-    const submitBtn = document.getElementById('submit-btn');
-    const startBtn = document.getElementById('start-btn');
-    const feedbackEl = document.getElementById('feedback');
-    const scoreEl = document.getElementById('score');
-    const loadingEl = document.getElementById('loading');
+    const answerInput = document.getElementById('answerInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusEl = document.getElementById('status');
 
-    let currentQuestion = '';
-    let currentAnswer = '';
-    let score = 0;
-    let isWaitingForAnswer = false;
-
-    startBtn.addEventListener('click', () => {
-      score = 0;
-      updateScore();
-      startBtn.disabled = true;
-      answerInput.disabled = false;
-      submitBtn.disabled = false;
-      feedbackEl.textContent = '';
-      loadNewQuestion();
-      answerInput.focus();
-    });
-
-    submitBtn.addEventListener('click', () => {
-      if (isWaitingForAnswer) return; // prevent double submit
-      const userAnswer = answerInput.value.trim();
-      if (!userAnswer) return;
-      checkAnswer(userAnswer);
-    });
-
-    answerInput.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter' && !submitBtn.disabled) {
-        submitBtn.click();
-      }
-    });
-
-    function updateScore() {
-      scoreEl.textContent = `Poäng: ${score}`;
-    }
-
-    async function loadNewQuestion() {
-      loadingEl.style.display = 'block';
-      feedbackEl.textContent = '';
+    async function fetchQuestion() {
+      questionEl.textContent = 'Laddar fråga...';
+      statusEl.textContent = '';
       answerInput.value = '';
-      answerInput.disabled = true;
-      submitBtn.disabled = true;
-      currentQuestion = '';
-      currentAnswer = '';
-      isWaitingForAnswer = true;
-
       try {
-        // Skicka fråga till proxyfunktionen som skickar vidare till OpenRouter API
-        const prompt = "Ge mig en enkel allmänkunskapsfråga och dess svar på svenska i formatet: fråga: ... svar: ...";
-
         const response = await fetch('/.netlify/functions/openrouter-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: "openai/gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            max_tokens: 100,
-          }),
+            prompt: "Ställ en kort, enkel quizfråga på svenska med svar.",
+            max_tokens: 100
+          })
         });
-
-        if (!response.ok) {
-          throw new Error('Något gick fel vid hämtning av fråga');
-        }
-
+        if (!response.ok) throw new Error('Något gick fel');
         const data = await response.json();
-        // OpenRouter brukar returnera ett svar i data.choices[0].message.content
-        let text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-
-        if (!text) throw new Error('Inget svar från API');
-
-        // Parsar fråga och svar från texten
-        // Förväntat format: "fråga: ... svar: ..."
-        const match = text.match(/fråga:\s*(.+)\s+svar:\s*(.+)/i);
-        if (match && match.length === 3) {
-          currentQuestion = match[1].trim();
-          currentAnswer = match[2].trim().toLowerCase();
-        } else {
-          // Om formatet inte stämmer, visa hela texten som fråga och förvänta att svar blir korrekt
-          currentQuestion = text.trim();
-          currentAnswer = ''; // okänt svar
-        }
-
-        questionEl.textContent = currentQuestion;
-        questionEl.classList.add('fade-in');
-        answerInput.disabled = false;
-        submitBtn.disabled = false;
-        answerInput.focus();
-      } catch (e) {
-        questionEl.textContent = "Kunde inte hämta fråga, prova igen senare.";
-        answerInput.disabled = true;
-        submitBtn.disabled = true;
-        console.error(e);
-      } finally {
-        loadingEl.style.display = 'none';
-        isWaitingForAnswer = false;
+        const text = data.choices?.[0]?.text?.trim() || 'Ingen fråga från API';
+        questionEl.textContent = text;
+      } catch (err) {
+        questionEl.textContent = 'Kunde inte hämta fråga.';
+        console.error(err);
       }
     }
 
-    function checkAnswer(userAnswer) {
-      isWaitingForAnswer = true;
-      answerInput.disabled = true;
-      submitBtn.disabled = true;
+    submitBtn.onclick = () => {
+      statusEl.textContent = 'Tack för ditt svar!';
+      setTimeout(fetchQuestion, 2000); // Hämta ny fråga efter 2 sek
+    };
 
-      // Enkel jämförelse, case insensitive och trim
-      const correct = currentAnswer ? userAnswer.toLowerCase() === currentAnswer : false;
-
-      if (correct) {
-        score++;
-        feedbackEl.textContent = 'Rätt svar! 🎉';
-        feedbackEl.style.color = '#2cb67d';
-      } else {
-        feedbackEl.textContent = `Fel svar. Rätt svar är: ${currentAnswer || 'okänt'}`;
-        feedbackEl.style.color = '#d64545';
-      }
-      updateScore();
-
-      // Ladda ny fråga efter 2 sek
-      setTimeout(() => {
-        feedbackEl.textContent = '';
-        loadNewQuestion();
-      }, 2000);
-    }
+    // Ladda första fråga direkt
+    fetchQuestion();
   </script>
 </body>
 </html>
