@@ -1,90 +1,51 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenRouter Quiz</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-        Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-      background: #222;
-      color: #eee;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 2rem;
-    }
-    #question {
-      font-size: 1.5rem;
-      margin-bottom: 1rem;
-      max-width: 600px;
-      text-align: center;
-    }
-    #answerInput {
-      font-size: 1.2rem;
-      padding: 0.5rem;
-      width: 300px;
-      max-width: 90vw;
-      margin-bottom: 1rem;
-    }
-    #submitBtn {
-      font-size: 1.2rem;
-      padding: 0.5rem 1rem;
-      cursor: pointer;
-    }
-    #status {
-      margin-top: 1rem;
-      min-height: 1.5rem;
-    }
-  </style>
-</head>
-<body>
-  <h1>OpenRouter Quiz</h1>
-  <div id="question">Laddar fråga...</div>
-  <input id="answerInput" placeholder="Skriv ditt svar här" autocomplete="off" />
-  <button id="submitBtn">Skicka svar</button>
-  <div id="status"></div>
+const fetch = require('node-fetch');
 
-  <script>
-    const questionEl = document.getElementById('question');
-    const answerInput = document.getElementById('answerInput');
-    const submitBtn = document.getElementById('submitBtn');
-    const statusEl = document.getElementById('status');
+exports.handler = async function(event) {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
 
-    async function fetchQuestion() {
-      questionEl.textContent = 'Laddar fråga...';
-      statusEl.textContent = '';
-      answerInput.value = '';
-      try {
-        const response = await fetch('/.netlify/functions/openrouter-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: "Ställ en kort, enkel quizfråga på svenska med svar.",
-            max_tokens: 100
-          })
-        });
-        if (!response.ok) throw new Error('Något gick fel');
-        const data = await response.json();
-        const text = data.choices?.[0]?.text?.trim() || 'Ingen fråga från API';
-        questionEl.textContent = text;
-      } catch (err) {
-        questionEl.textContent = 'Kunde inte hämta fråga.';
-        console.error(err);
-      }
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+  if (!OPENROUTER_API_KEY) {
+    return { statusCode: 500, body: 'API-nyckel saknas' };
+  }
+
+  try {
+    const body = JSON.parse(event.body);
+
+    const apiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'openrouter-gpt-3-large',
+        messages: [{ role: 'user', content: body.prompt }],
+        max_tokens: body.max_tokens || 100,
+      }),
+    });
+
+    if (!apiResponse.ok) {
+      const errText = await apiResponse.text();
+      return { statusCode: apiResponse.status, body: `OpenRouter error: ${errText}` };
     }
 
-    submitBtn.onclick = () => {
-      statusEl.textContent = 'Tack för ditt svar!';
-      setTimeout(fetchQuestion, 2000); // Hämta ny fråga efter 2 sek
+    const json = await apiResponse.json();
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(json),
     };
 
-    // Ladda första fråga direkt
-    fetchQuestion();
-  </script>
-</body>
-</html>
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: `Server error: ${error.message}`
+    };
+  }
+};
